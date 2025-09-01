@@ -16,8 +16,10 @@ import SupplierHome from "./pages/supplier/SupplierHome";
 
 import ProtectedRoute from "./services/ProtectedRoute";
 
+//Admin components
 import GestionUsuarios from "./pages/admin/GestionUsuarios";
 import AdminLayout from "./pages/admin/AdminLayout";
+import GestionVehiculos from "./pages/admin/GestionVehiculos";
 
 const router = createBrowserRouter([
   {
@@ -43,6 +45,7 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <AdminHome /> },
           { path: "usuarios", element: <GestionUsuarios /> },
+          { path: "vehiculos", element: <GestionVehiculos /> },
         ],
       },
       {

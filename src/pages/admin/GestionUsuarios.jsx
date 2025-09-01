@@ -20,6 +20,7 @@ export default function GestionUsuarios() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   // Create/Edit modal state
   const [openModal, setOpenModal] = useState(false);
@@ -136,13 +137,19 @@ export default function GestionUsuarios() {
     setOpenModal(true);
   }
 
-  async function onDelete(id) {
-    if (!confirm("¿Eliminar este usuario?")) return;
+  function onDeleteRequest(user) {
+    setConfirmDelete(user);
+  }
+
+  async function confirmDeleteUser() {
+    if (!confirmDelete) return;
     try {
-      await api.del(`/usuario/${id}`);
+      await api.del(`/usuario/${confirmDelete.id}`);
       await fetchUsers();
     } catch (e) {
       alert(e.message || "No se pudo eliminar");
+    } finally {
+      setConfirmDelete(null);
     }
   }
 
@@ -237,7 +244,7 @@ export default function GestionUsuarios() {
                       </button>
                       <button
                         className="btn btn-ghost btn-sm text-error join-item"
-                        onClick={() => onDelete(u.id)}
+                        onClick={() => onDeleteRequest(u)}
                       >
                         Eliminar
                       </button>
@@ -260,6 +267,35 @@ export default function GestionUsuarios() {
             await fetchUsers();
           }}
         />
+      )}
+
+      {confirmDelete && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg text-error">
+              Confirmar eliminación
+            </h3>
+            <p className="py-4">
+              ¿Seguro que deseas eliminar al usuario{" "}
+              <strong>
+                {confirmDelete.nombre} {confirmDelete.apellido}
+              </strong>
+              ? Esta acción no se puede deshacer.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button className="btn" onClick={() => setConfirmDelete(null)}>
+                Cancelar
+              </button>
+              <button className="btn btn-error" onClick={confirmDeleteUser}>
+                Eliminar
+              </button>
+            </div>
+          </div>
+          <div
+            className="modal-backdrop"
+            onClick={() => setConfirmDelete(null)}
+          ></div>
+        </div>
       )}
     </section>
   );

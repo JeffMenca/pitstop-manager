@@ -22,6 +22,8 @@ import AdminLayout from "./pages/admin/AdminLayout";
 import GestionVehiculos from "./pages/admin/GestionVehiculos";
 import GestionOrdenes from "./pages/admin/GestionOrdenes";
 import GestionInventario from "./pages/admin/GestionInventario";
+import GestionFactura from "./pages/admin/GestionFactura";
+import GestionPagosProveedores from "./pages/admin/GestionPagosProveedores";
 
 const router = createBrowserRouter([
   {
@@ -50,6 +52,8 @@ const router = createBrowserRouter([
           { path: "vehiculos", element: <GestionVehiculos /> },
           { path: "trabajos", element: <GestionOrdenes /> },
           { path: "inventario", element: <GestionInventario /> },
+          { path: "facturacion", element: <GestionFactura /> },
+          { path: "pagos", element: <GestionPagosProveedores /> },
         ],
       },
       {

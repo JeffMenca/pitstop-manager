@@ -1,16 +1,18 @@
+// src/pages/GestionOrdenes.jsx
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../../services/api";
 import { useSearchParams } from "react-router-dom";
+import { jsPDF } from "jspdf";
 
 /* ==================== helpers ==================== */
 
 function estadoBadge(id) {
   const n = Number(id);
   if (n === 1) return "badge badge-warning"; // Pendiente
-  if (n === 2) return "badge badge-error"; // Cancelado
-  if (n === 3) return "badge badge-success";    // Aprobado 
-  if (n === 4) return "badge badge-info"; // En curso
-  if (n === 5) return "badge badge-success"; // COmpletado
+  if (n === 2) return "badge badge-error";   // Cancelado
+  if (n === 3) return "badge badge-success"; // Aprobado
+  if (n === 4) return "badge badge-info";    // En curso
+  if (n === 5) return "badge badge-success"; // Completado
   return "badge badge-ghost";
 }
 
@@ -20,7 +22,15 @@ function vehicleLabel(v) {
   return `${placas || ""} ${marca || ""} ${modelo || ""}`.trim();
 }
 
+const fmtMoney = (n) =>
+  isFinite(Number(n))
+    ? Number(n).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    : n;
 
+// Normalizers
 function normalizeServicio(s) {
   return {
     id: Number(s.id),
@@ -33,22 +43,52 @@ function normalizeServicio(s) {
   };
 }
 
-/* ==================== Página principal ==================== */
+function normFactura(f) {
+  return {
+    id: Number(f.id),
+    id_orden_reparacion: Number(
+      f.id_orden_reparacion ?? f.id_orden ?? f.orden_id ?? 0
+    ),
+    fecha: String(f.fecha ?? ""),
+    total: Number(f.total ?? 0),
+    raw: f,
+  };
+}
 
-export default function GestionOrdenes() {
+
+function dateForInput(val) {
+  if (!val) return "";
+  // ya viene en yyyy-MM-dd
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  // ISO con hora -> a local yyyy-MM-dd
+  const d = new Date(val);
+  if (isNaN(d)) return String(val).slice(0, 10);
+  const off = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return off.toISOString().slice(0, 10);
+}
+function todayInput() {
+  const d = new Date();
+  const off = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return off.toISOString().slice(0, 10);
+}
+
+/* ==================== Main content ==================== */
+
+export default function GestionFactura() {
   // URL (?vehiculoId=)
   const [sp] = useSearchParams();
   const vehiculoIdFromURL = Number(sp.get("vehiculoId") || 0);
 
-  // Filters
+  // Filtros
   const [q, setQ] = useState("");
-  const [estadoFilter, setEstadoFilter] = useState(0); // 0 = todos
+  const [estadoFilter, setEstadoFilter] = useState(0); 
   const [vehiculoId, setVehiculoId] = useState(vehiculoIdFromURL || 0);
 
-  // Data
+  // Datos
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
+
 
   const [estadosOrden, setEstadosOrden] = useState([]);
   const estadoOrdenMap = useMemo(() => {
@@ -59,19 +99,34 @@ export default function GestionOrdenes() {
 
 
   const [estadosTrabajo, setEstadosTrabajo] = useState([]);
+
   const estadoTrabajoMap = useMemo(() => {
     const m = new Map();
     estadosTrabajo.forEach((e) => m.set(Number(e.id), String(e.label)));
     return m;
   }, [estadosTrabajo]);
 
-  // Modals
+  // ===== Invoices =====
+  const [facturas, setFacturas] = useState([]);
+  const factByOrderId = useMemo(() => {
+    const m = new Map();
+    facturas.forEach((f) => m.set(f.id_orden_reparacion, f));
+    return m;
+  }, [facturas]);
+
+  // Modales
   const [editing, setEditing] = useState(null);
   const [openOrderModal, setOpenOrderModal] = useState(false);
+
   const [openServicesPanel, setOpenServicesPanel] = useState(false);
   const [servicesForOrder, setServicesForOrder] = useState(null);
+
   const [confirmDeleteOrder, setConfirmDeleteOrder] = useState(null);
   const [deletingOrder, setDeletingOrder] = useState(false);
+
+  const [openFacturaModal, setOpenFacturaModal] = useState(false);
+  const [facturaTarget, setFacturaTarget] = useState(null); 
+
 
   const vehicleMap = useMemo(() => {
     const map = new Map();
@@ -82,7 +137,6 @@ export default function GestionOrdenes() {
   }, [rows]);
 
 
-//Loads states for orders
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -134,6 +188,8 @@ export default function GestionOrdenes() {
     };
   }, []);
 
+
+  //Orders
   const fetchOrdenes = useCallback(async () => {
     setLoading(true);
     setErr(null);
@@ -144,7 +200,6 @@ export default function GestionOrdenes() {
       } else if (estadoFilter > 0) {
         data = await api.get(`/ordenreparacion/estado/${estadoFilter}`);
       } else if (q && /^[A-Za-z0-9-]+$/.test(q)) {
-        // Si escriben placas y tienes ese endpoint
         try {
           data = await api.get(`/ordenreparacion/placas/${q}`);
         } catch {
@@ -172,9 +227,23 @@ export default function GestionOrdenes() {
     }
   }, [vehiculoId, estadoFilter, q]);
 
+
+  const fetchFacturas = useCallback(async () => {
+    try {
+      const data = await api.get("/factura");
+      setFacturas((Array.isArray(data) ? data : []).map(normFactura));
+    } catch {
+      setFacturas([]);
+    }
+  }, []);
+
   useEffect(() => {
     fetchOrdenes();
   }, [fetchOrdenes]);
+
+  useEffect(() => {
+    fetchFacturas();
+  }, [fetchFacturas]);
 
   // Handlers
   function openCreate() {
@@ -206,6 +275,7 @@ export default function GestionOrdenes() {
     try {
       await api.del(`/ordenreparacion/${confirmDeleteOrder.id}`);
       await fetchOrdenes();
+      await fetchFacturas(); 
     } catch (e) {
       alert(e.message || "No se pudo eliminar");
     } finally {
@@ -219,12 +289,18 @@ export default function GestionOrdenes() {
     setOpenServicesPanel(true);
   }
 
+  function openFactura(order) {
+    const existing = factByOrderId.get(order.id) || null;
+    setFacturaTarget({ orden: order, factura: existing });
+    setOpenFacturaModal(true);
+  }
+
   return (
     <section className="prose max-w-none px-10">
       <h2>Órdenes de reparación</h2>
       <p className="opacity-70 mb-10">
         Crea, actualiza estados, registra egreso y administra servicios ligados
-        a una orden.
+        a una orden. También puedes generar la factura.
       </p>
 
       {/* Toolbar */}
@@ -236,18 +312,20 @@ export default function GestionOrdenes() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-          <button className="btn join-item mr-10" onClick={() => setQ("")}>
+        </div>
+
+        <div className="join">
+          <input
+            type="number"
+            className="input input-bordered join-item"
+            placeholder="ID Vehículo"
+            value={vehiculoId || ""}
+            onChange={(e) => setVehiculoId(Number(e.target.value) || 0)}
+          />
+          <button className="btn join-item" onClick={() => setQ("")}>
             Limpiar
           </button>
         </div>
-
-        <input
-          type="number"
-          className="input input-bordered"
-          placeholder="ID Vehículo"
-          value={vehiculoId || ""}
-          onChange={(e) => setVehiculoId(Number(e.target.value) || 0)}
-        />
 
         <select
           className="select select-bordered"
@@ -265,7 +343,13 @@ export default function GestionOrdenes() {
         <button className="btn btn-primary" onClick={openCreate}>
           Nueva orden
         </button>
-        <button className="btn btn-ghost" onClick={fetchOrdenes}>
+        <button
+          className="btn btn-ghost"
+          onClick={() => {
+            fetchOrdenes();
+            fetchFacturas();
+          }}
+        >
           Recargar
         </button>
       </div>
@@ -283,73 +367,101 @@ export default function GestionOrdenes() {
               <th>Ingreso</th>
               <th>Egreso</th>
               <th>Estado</th>
+              <th>Factura</th>
               <th className="text-right">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={7}>
                   <span className="loading loading-spinner loading-sm"></span>
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={6}>Sin registros.</td>
+                <td colSpan={7}>Sin registros.</td>
               </tr>
             ) : (
-              rows.map((o) => (
-                <tr key={o.id}>
-                  <td>{o.id}</td>
-                  <td title={`Vehículo ${o.id_vehiculo}`}>
-                    {vehicleLabel(o.vehiculo) || `ID ${o.id_vehiculo}`}
-                  </td>
-                  <td>
-                    {o.fecha_ingreso} {o.hora_ingreso}
-                  </td>
-                  <td>
-                    {o.fecha_egreso ? (
-                      `${o.fecha_egreso} ${o.hora_egreso}`
-                    ) : (
-                      <span className="opacity-60">—</span>
-                    )}
-                  </td>
-                  <td>
-                    <span className={estadoBadge(o.estado)}>
-                      {estadoOrdenMap.get(Number(o.estado)) ||
-                        `Estado ${o.estado}`}
-                    </span>
-                  </td>
-                  <td className="text-right">
-                    <div className="join">
-                      <button
-                        className="btn btn-outline btn-sm join-item"
-                        onClick={() => openServices(o)}
-                      >
-                        Servicios
-                      </button>
-                      <button
-                        className="btn btn-ghost btn-sm join-item"
-                        onClick={() => openEdit(o)}
-                      >
-                        Editar
-                      </button>
-                      <button
-                        className="btn btn-ghost btn-sm text-error join-item"
-                        onClick={() => onDeleteRequest(o)}
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              rows.map((o) => {
+                const inv = factByOrderId.get(o.id);
+                return (
+                  <tr key={o.id}>
+                    <td>{o.id}</td>
+                    <td title={`Vehículo ${o.id_vehiculo}`}>
+                      {vehicleLabel(o.vehiculo) || `ID ${o.id_vehiculo}`}
+                    </td>
+                    <td>
+                      {o.fecha_ingreso} {o.hora_ingreso}
+                    </td>
+                    <td>
+                      {o.fecha_egreso ? (
+                        `${o.fecha_egreso} ${o.hora_egreso}`
+                      ) : (
+                        <span className="opacity-60">—</span>
+                      )}
+                    </td>
+                    <td>
+                      <span className={estadoBadge(o.estado)}>
+                        {estadoOrdenMap.get(Number(o.estado)) ||
+                          `Estado ${o.estado}`}
+                      </span>
+                    </td>
+                    <td>
+                      {inv ? (
+                        <span
+                          className="badge badge-success"
+                          title={`Factura #${inv.id}`}
+                        >
+                          #{inv.id} — ${fmtMoney(inv.total)}
+                        </span>
+                      ) : (
+                        <span className="badge badge-ghost">Sin factura</span>
+                      )}
+                    </td>
+                    <td className="text-right">
+                      <div className="join">
+                        <button
+                          className="btn btn-outline btn-sm join-item"
+                          onClick={() => openServices(o)}
+                        >
+                          Servicios
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm join-item"
+                          onClick={() => openEdit(o)}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          className={`btn btn-sm join-item ${
+                            factByOrderId.has(o.id)
+                              ? "btn-outline"
+                              : "btn-secondary"
+                          }`}
+                          onClick={() => openFactura(o)}
+                        >
+                          {factByOrderId.has(o.id)
+                            ? "Editar factura"
+                            : "Generar factura"}
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm text-error join-item"
+                          onClick={() => onDeleteRequest(o)}
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
 
-      {/* Modales */}
+      {/* Modals */}
       {openOrderModal && (
         <OrdenModal
           initial={editing}
@@ -369,6 +481,18 @@ export default function GestionOrdenes() {
           estadosTrabajo={estadosTrabajo}
           estadoTrabajoMap={estadoTrabajoMap}
           onClose={() => setOpenServicesPanel(false)}
+        />
+      )}
+
+      {openFacturaModal && facturaTarget && (
+        <FacturaModal
+          orden={facturaTarget.orden}
+          factura={facturaTarget.factura}
+          onClose={() => setOpenFacturaModal(false)}
+          onSaved={async () => {
+            setOpenFacturaModal(false);
+            await fetchFacturas();
+          }}
         />
       )}
 
@@ -410,7 +534,7 @@ export default function GestionOrdenes() {
   );
 }
 
-/* ==================== Modal de Orden ==================== */
+/* ==================== Modal order ==================== */
 
 function OrdenModal({
   initial,
@@ -432,7 +556,6 @@ function OrdenModal({
     setSaving(true);
     try {
       if (isEdit) {
-        // PUT columna a columna
         const diffs = diffOrden(initial, form);
         for (const [columnName, value] of Object.entries(diffs)) {
           await api.put(`/ordenreparacion/${initial.id}`, {
@@ -441,7 +564,6 @@ function OrdenModal({
           });
         }
       } else {
-        // POST crear (incluye estado de la ORDEN)
         const body = {
           id_vehiculo: Number(form.id_vehiculo),
           fecha_ingreso: String(form.fecha_ingreso || ""),
@@ -484,7 +606,7 @@ function OrdenModal({
             />
           </div>
 
-          {/* Estado de la ORDEN (seleccionable también al crear) */}
+          {/* Estado de la ORDEN  */}
           <div className="form-control">
             <label className="label">
               <span className="label-text">Estado</span>
@@ -597,7 +719,7 @@ function diffOrden(initial, next) {
   return diffs;
 }
 
-/* ==================== Panel Servicios de la Orden ==================== */
+/* ==================== Service of order ==================== */
 
 function ServiciosOrdenPanel({
   orden,
@@ -624,6 +746,7 @@ function ServiciosOrdenPanel({
   const [confirmDeleteSvc, setConfirmDeleteSvc] = useState(null);
   const [deletingSvc, setDeletingSvc] = useState(false);
 
+  // Cargar catálogo
   const fetchServicios = useCallback(async () => {
     setSvcLoading(true);
     try {
@@ -946,7 +1069,7 @@ function ServiciosOrdenPanel({
                 {confirmDeleteSvc.servicio ||
                   `Servicio #${confirmDeleteSvc.id}`}
               </strong>
-              ? Esta acción no se puede deshacer.
+              ?
             </p>
             <div className="flex justify-end gap-2">
               <button
@@ -975,7 +1098,7 @@ function ServiciosOrdenPanel({
   );
 }
 
-/* ==================== Modal CRUD Servicio ==================== */
+/* ==================== Modal CRUD Service ==================== */
 
 function ServicioModal({ initial, onClose, onSaved }) {
   const [form, setForm] = useState(() => ({ ...initial }));
@@ -1107,7 +1230,7 @@ function ServicioModal({ initial, onClose, onSaved }) {
   );
 }
 
-/* ==================== Modal Línea Servicio-Orden ==================== */
+/* ==================== Modal Líne Service-Order ==================== */
 
 function LineaServicioModal({
   initial,
@@ -1229,7 +1352,280 @@ function LineaServicioModal({
   );
 }
 
-/* ==================== generic utils ==================== */
+/* ==================== Modal Invoice ==================== */
+
+function FacturaModal({ orden, factura, onClose, onSaved }) {
+  const isEdit = Boolean(factura?.id);
+
+  const [form, setForm] = useState(() => ({
+    id_orden_reparacion: Number(orden?.id || factura?.id_orden_reparacion || 0),
+    fecha: dateForInput(factura?.fecha || todayInput()),
+    total: Number(factura?.total ?? 0),
+  }));
+  const [saving, setSaving] = useState(false);
+
+
+  const [lines, setLines] = useState([]);
+  const [svc, setSvc] = useState([]);
+
+  const upd = (k, v) => setForm((s) => ({ ...s, [k]: v }));
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const allLines = await api.get("/servicioordenreparacion");
+        const ordenId = Number(orden.id);
+        const filtered = (Array.isArray(allLines) ? allLines : []).filter(
+          (r) =>
+            Number(r.id_orden_reparacion ?? r.id_orden ?? r.idOrden) === ordenId
+        );
+        setLines(filtered);
+      } catch {
+        setLines([]);
+      }
+      try {
+        const data = await api.get("/servicio");
+        setSvc(
+          (Array.isArray(data) ? data : []).map((s) => ({
+            id: Number(s.id),
+            nombre: String(s.servicio ?? s.nombre ?? ""),
+            precio: Number(s.precio ?? 0),
+          }))
+        );
+      } catch {
+        setSvc([]);
+      }
+    })();
+  }, [orden.id]);
+
+  const sugerido = useMemo(() => {
+    const map = new Map(svc.map((s) => [s.id, s]));
+    return lines.reduce(
+      (acc, l) => acc + (map.get(Number(l.id_servicio))?.precio ?? 0),
+      0
+    );
+  }, [lines, svc]);
+
+  async function onSubmit(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      if (isEdit) {
+        const diffs = {};
+        if (dateForInput(factura.fecha || "") !== dateForInput(form.fecha || ""))
+          diffs["fecha"] = dateForInput(form.fecha);
+        if (Number(factura.total ?? 0) !== Number(form.total ?? 0))
+          diffs["total"] = Number(form.total);
+
+        for (const [columnName, value] of Object.entries(diffs)) {
+          await api.put(`/factura/${factura.id}`, {
+            columnName,
+            value: String(value),
+          });
+        }
+      } else {
+        await api.post("/factura", {
+          id_orden_reparacion: Number(form.id_orden_reparacion),
+          fecha: dateForInput(form.fecha || todayInput()),
+          total: Number(form.total || 0),
+        });
+      }
+      await onSaved?.();
+    } catch (e) {
+      alert(e.message || "No se pudo guardar la factura");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function descargarPDF() {
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const pageW = doc.internal.pageSize.getWidth();
+    let y = 15;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("PitStop Manager", 15, y);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Factura #${factura?.id ?? "-"}`, 15, (y += 6));
+
+    doc.setFont("helvetica", "normal");
+    const right = (txt, yy) => doc.text(txt, pageW - 15, yy, { align: "right" });
+    right(`Fecha: ${dateForInput(form.fecha)}`, 15);
+    right(`Orden: #${orden?.id}`, 21);
+    const veh =
+      orden?.vehiculo
+        ? `${orden.vehiculo.placas ?? ""} ${orden.vehiculo.marca ?? ""} ${orden.vehiculo.modelo ?? ""}`.trim()
+        : `ID ${orden?.id_vehiculo}`;
+    right(`Vehículo: ${veh}`, 27);
+
+    y = 32;
+    doc.setDrawColor(180);
+    doc.line(15, y, pageW - 15, y);
+    y += 8;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("Detalle", 15, y);
+    y += 6;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("#", 15, y);
+    doc.text("Servicio", 25, y);
+    right("Precio", y);
+    y += 4;
+
+    doc.setDrawColor(200);
+    doc.line(15, y, pageW - 15, y);
+    y += 6;
+
+    doc.setFont("helvetica", "normal");
+    const serviciosRender = (() => {
+      const map = new Map(svc.map((s) => [s.id, s]));
+      return lines.map((l) => {
+        const s = map.get(Number(l.id_servicio));
+        return {
+          id: l.id,
+          nombre: s?.nombre ?? `Servicio #${l.id_servicio}`,
+          precio: s?.precio ?? 0,
+        };
+      });
+    })();
+
+    if (serviciosRender.length === 0) {
+      doc.text("Sin servicios asociados", 25, y);
+      y += 6;
+    } else {
+      serviciosRender.forEach((it, idx) => {
+        if (y > 270) {
+          doc.addPage();
+          y = 15;
+        }
+        doc.text(String(idx + 1), 15, y);
+        const maxWidth = pageW - 15 - 15 - 30; 
+        const lines = doc.splitTextToSize(it.nombre, maxWidth);
+        doc.text(lines, 25, y);
+        right(`$${Number(it.precio).toFixed(2)}`, y);
+        y += 6 + (lines.length - 1) * 5;
+      });
+    }
+
+    // Totald
+    y += 4;
+    doc.setDrawColor(200);
+    doc.line(15, y, pageW - 15, y);
+    y += 8;
+
+    const totalStr = `$${Number(form.total ?? 0).toFixed(2)}`;
+    doc.setFont("helvetica", "bold");
+    right("Total", y);
+    right(totalStr, (y += 6));
+
+    doc.save(`Factura_${orden.id}.pdf`);
+  }
+
+  const fmt = (n) =>
+    isFinite(Number(n))
+      ? Number(n).toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
+      : n;
+
+  return (
+    <div className="modal modal-open">
+      <div className="modal-box max-w-3xl">
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="font-bold text-lg">
+            {isEdit
+              ? `Editar factura #${factura.id}`
+              : `Generar factura (Orden #${orden.id})`}
+          </h3>
+          <button className="btn btn-outline btn-sm" onClick={descarargarPDFSafe}>
+            Descargar PDF
+          </button>
+        </div>
+
+        {/* Formulario de edición/creación */}
+        <form
+          className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4"
+          onSubmit={onSubmit}
+        >
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Orden</span>
+            </label>
+            <input
+              className="input input-bordered"
+              value={form.id_orden_reparacion}
+              disabled
+            />
+          </div>
+
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Fecha</span>
+            </label>
+            <input
+              type="date"
+              className="input input-bordered"
+              value={dateForInput(form.fecha) || ""}
+              onChange={(e) => upd("fecha", e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Total</span>
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              className="input input-bordered"
+              value={form.total ?? 0}
+              onChange={(e) => upd("total", Number(e.target.value))}
+              required
+            />
+            <label className="label">
+              <span className="label-text-alt">
+                Sugerido por servicios: ${fmt(sugerido)}
+              </span>
+            </label>
+          </div>
+
+          <div className="md:col-span-3 flex justify-end gap-2 mt-2">
+            <button type="button" className="btn" onClick={onClose}>
+              Cancelar
+            </button>
+            <button className="btn btn-primary" type="submit" disabled={saving}>
+              {saving
+                ? "Guardando..."
+                : isEdit
+                ? "Actualizar"
+                : "Crear factura"}
+            </button>
+          </div>
+        </form>
+      </div>
+      <div className="modal-backdrop" onClick={onClose}></div>
+    </div>
+  );
+
+  function descarargarPDFSafe() {
+    try {
+      descargarPDF();
+    } catch (e) {
+      console.error(e);
+      alert("No se pudo generar el PDF.");
+    }
+  }
+}
+
+/* ==================== utils generics==================== */
 
 function diffGeneric(initial, next, keys) {
   const diffs = {};

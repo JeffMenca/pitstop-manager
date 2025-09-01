@@ -21,6 +21,7 @@ import GestionUsuarios from "./pages/admin/GestionUsuarios";
 import AdminLayout from "./pages/admin/AdminLayout";
 import GestionVehiculos from "./pages/admin/GestionVehiculos";
 import GestionOrdenes from "./pages/admin/GestionOrdenes";
+import GestionInventario from "./pages/admin/GestionInventario";
 
 const router = createBrowserRouter([
   {
@@ -48,6 +49,7 @@ const router = createBrowserRouter([
           { path: "usuarios", element: <GestionUsuarios /> },
           { path: "vehiculos", element: <GestionVehiculos /> },
           { path: "trabajos", element: <GestionOrdenes /> },
+          { path: "inventario", element: <GestionInventario /> },
         ],
       },
       {

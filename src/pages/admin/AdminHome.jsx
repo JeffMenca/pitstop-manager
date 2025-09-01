@@ -35,16 +35,6 @@ export default function AdminHome() {
     },
   ];
 
-  const jobsShortcuts = [
-    { to: "/admin/trabajos/crear", title: "Crear trabajo" },
-    { to: "/admin/trabajos/asignar", title: "Asignar trabajo" },
-    { to: "/admin/trabajos/reasignar", title: "Reasignar trabajo" },
-    { to: "/admin/trabajos/cancelar", title: "Cancelar trabajo" },
-    { to: "/admin/trabajos/activos", title: "Ver activos" },
-    { to: "/admin/trabajos/finalizados", title: "Ver finalizados" },
-    { to: "/admin/trabajos/cancelados", title: "Ver cancelados" },
-  ];
-
   return (
     <section className="prose max-w-none">
       <div className="mb-6">
@@ -101,22 +91,7 @@ export default function AdminHome() {
           </Link>
         ))}
       </div>
-
-      {/* Quick actions for jobs */}
-      <div className="mb-3">
-        <h3 className="text-lg font-semibold">Acciones rápidas (Trabajos)</h3>
-        <p className="opacity-70 mb-3">
-          Atajos para crear, asignar, cancelar y visualizar por estado.
-        </p>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        {jobsShortcuts.map((j) => (
-          <Link key={j.to} to={j.to} className="btn btn-outline justify-start">
-            {j.title}
-          </Link>
-        ))}
-      </div>
+     
     </section>
   );
 }

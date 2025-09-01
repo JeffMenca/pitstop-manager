@@ -1,121 +1,65 @@
+import { useNavigate } from "react-router-dom";
+import useAuth from "../services/useAuth";
+import AdminHome from "./admin/AdminHome";
+import ClientHome from "./client/ClientHome";
+import EmployeeHome from "./employee/EmployeeHome";
+import SupplierHome from "./supplier/SupplierHome";
+
+function normalizeRole(roleName = "") {
+  // Normalize role to a simple key
+  const r = roleName.trim().toLowerCase();
+  if (r.includes("admin")) return "admin";
+  if (r.includes("client") || r.includes("cliente")) return "client";
+  if (r.includes("emple")) return "employee";
+  if (r.includes("prove")) return "supplier";
+  return "unknown";
+}
+
 export default function Home() {
-  return (
-    <section className="prose max-w-none">
-      <div className="mt-4 flex gap-2 justify-center w-full">
-        <div className="flex justify-center items-center min-h-screen bg-base-200 w-[500px]">
-          <div className="card w-full max-w-lg shadow-2xl bg-base-100">
-            <div className="card-body">
-              <h2 className="text-2xl font-bold text-center mb-4">
-                Actualizacion de usuario
-              </h2>
-              <form className="space-y-4">
-                {/* Nombre */}
-                <div className="form-control">
-                  <label className="label w-20">
-                    <span className="label-text">Nombre</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ingresa tu nombre"
-                    className="input input-bordered"
-                  />
-                </div>
+  const auth = useAuth();
+  const navigate = useNavigate();
 
-                {/* Apellido */}
-                <div className="form-control">
-                  <label className="label w-20">
-                    <span className="label-text">Apellido</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ingresa tu apellido"
-                    className="input input-bordered"
-                  />
-                </div>
+  function handleLogin() {
+    navigate("/login", { replace: true });
+  }
 
-                {/* Username */}
-                <div className="form-control">
-                  <label className="label w-20">
-                    <span className="label-text">Usuario</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Nombre de usuario"
-                    className="input input-bordered"
-                  />
-                </div>
-
-                {/* Password */}
-                <div className="form-control">
-                  <label className="label w-20">
-                    <span className="label-text">Contraseña</span>
-                  </label>
-                  <input
-                    type="password"
-                    placeholder="********"
-                    className="input input-bordered"
-                  />
-                </div>
-
-                {/* Rol */}
-                <div className="form-control">
-                  <label className="label w-20">
-                    <span className="label-text">Rol</span>
-                  </label>
-                  <select className="select select-bordered">
-                    <option disabled selected>
-                      Selecciona un rol
-                    </option>
-                    <option>Administrador</option>
-                    <option>Usuario</option>
-                    <option>Invitado</option>
-                  </select>
-                </div>
-
-                {/* Email */}
-                <div className="form-control">
-                  <label className="label w-20">
-                    <span className="label-text">Correo</span>
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="ejemplo@correo.com"
-                    className="input input-bordered"
-                  />
-                </div>
-
-                {/* Teléfono */}
-                <div className="form-control">
-                  <label className="label w-20">
-                    <span className="label-text">Teléfono</span>
-                  </label>
-                  <input
-                    type="tel"
-                    placeholder="+502 1234-5678"
-                    className="input input-bordered"
-                  />
-                </div>
-
-                {/* Correo verificado */}
-                <div className="form-control">
-                  <label className="cursor-pointer label w-20">
-                    <span className="label-text">¿Correo verificado?</span>
-                    <input
-                      type="checkbox"
-                      className="checkbox checkbox-primary border-pitstop-red"
-                    />
-                  </label>
-                </div>
-
-                {/* Botón */}
-                <div className="form-control mt-6 flex justify-center">
-                  <button className="btn btn-primary bg-pitstop-red border-pitstop-red">Actualizar Usuario</button>
-                </div>
-              </form>
-            </div>
-          </div>
+  if (!auth) {
+    // Not logged in
+    return (
+      <div className="hero min-h-[60vh]">
+        <div className="hero-content text-center flex flex-col">
+          <img
+            src="/pitstop-logo.png"
+            alt="PitStop Logo"
+            className="w-64 mb-4"
+          />
+          <h1 className="text-5xl font-bold">Bienvenido a PistopManager</h1>
+          <p className="py-6">Para continuar debe iniciar sesion.</p>
+          <button className="btn btn-primary" onClick={handleLogin}>
+            Iniciar sesion
+          </button>
         </div>
       </div>
+    );
+  }
+
+  const roleKey = normalizeRole(auth.roleName);
+
+  return (
+    <section className="prose max-w-none p-6 px-10">
+      <h2 className="text-4xl font-bold">Bienvenido {auth.username} !</h2>
+      <p>Rol: {auth.roleName}</p>
+
+      {roleKey === "admin" && <AdminHome />}
+      {roleKey === "client" && <ClientHome />}
+      {roleKey === "employee" && <EmployeeHome />}
+      {roleKey === "supplier" && <SupplierHome />}
+
+      {roleKey === "unknown" && (
+        <div className="p-4 border rounded">
+          Role <b>{auth.roleName}</b> is not recognized.
+        </div>
+      )}
     </section>
   );
 }

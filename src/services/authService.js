@@ -103,4 +103,35 @@ export const twoFactor = (code) => {
     }),
   });
 };
-/* ------------------------------------------------------------------ */
+
+
+// --- Role and session helpers (read from JWT) ---
+export function getRoleNameFromToken() {
+  const c = readJwtClaims();
+  return c?.rol?.rol || null; // e.g. "Administrador" | "Cliente" | "Empleado" | "Proveedor"
+}
+
+export function isTokenExpired() {
+  const c = readJwtClaims();
+  if (!c?.exp) return false;
+  const now = Math.floor(Date.now() / 1000);
+  return c.exp < now;
+}
+
+// Normalized session snapshot for UI
+export function getSessionAuth() {
+  const token = getToken();
+  if (!token) return null;
+  if (isTokenExpired()) {
+    clearAuth(); // clear token if expired
+    return null;
+  }
+  const claims = readJwtClaims();
+  if (!claims) return null;
+  return {
+    id: claims?.id ?? null,
+    username: claims?.username ?? null,
+    roleName: getRoleNameFromToken(), // "Administrador" | "Cliente" | "Empleado" | "Proveedor"
+    exp: claims?.exp ?? null,
+  };
+}

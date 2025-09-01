@@ -1,4 +1,4 @@
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { clearAuth } from "../services/authService";
 
@@ -36,7 +36,7 @@ export default function Navbar() {
                 to="/about"
                 className={({ isActive }) => (isActive ? "active" : "")}
               >
-                Acerca
+                Acerca de
               </NavLink>
             </li>
           </ul>

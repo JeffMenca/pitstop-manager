@@ -29,6 +29,18 @@ function estadoBadge(id) {
   return "badge";
 }
 
+function estadoTexto(id) {
+  const n = Number(id);
+  if (n === 1) return "Pendiente";
+  if (n === 2) return "Rechazado";
+  if (n === 3) return "Confirmado";
+  if (n === 4) return "En curso";
+  if (n === 5) return "En tránsito";
+  if (n === 6) return "Entregado";
+  if (n === 7) return "Aprobado"; 
+  return `Estado ${n}`;
+}
+
 async function tryGet(paths) {
   for (const p of paths) {
     try {
@@ -49,9 +61,18 @@ async function tryPost(paths, body) {
 async function tryAcceptPedido(id) {
   for (const base of PATHS.aceptarPedido) {
     const url = `${base}/${id}`;
-    try { await api.post(url, {}); return true; } catch {}
-    try { await api.put(url, {});  return true; } catch {}
-    try { await api.get(url);       return true; } catch {}
+    try {
+      await api.post(url, {});
+      return true;
+    } catch {}
+    try {
+      await api.put(url, {});
+      return true;
+    } catch {}
+    try {
+      await api.get(url);
+      return true;
+    } catch {}
   }
   return false;
 }
@@ -93,26 +114,36 @@ export default function SupplierPedidos() {
       setLoading(false);
     }
   }, []);
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
 
-  const findAny = useCallback((tokens) => {
-    const toks = tokens.map((t) => t.toLowerCase());
-    const it = estados.find((s) => {
-      const label = String(s.estado ?? s.nombre ?? s.descripcion ?? "").toLowerCase();
-      return toks.some((t) => label.includes(t));
-    });
-    return Number(it?.id || 0);
-  }, [estados]);
+  const findAny = useCallback(
+    (tokens) => {
+      const toks = tokens.map((t) => t.toLowerCase());
+      const it = estados.find((s) => {
+        const label = String(
+          s.estado ?? s.nombre ?? s.descripcion ?? ""
+        ).toLowerCase();
+        return toks.some((t) => label.includes(t));
+      });
+      return Number(it?.id || 0);
+    },
+    [estados]
+  );
 
-  const ids = useMemo(() => ({
-    pendiente: findAny(["pend"]),
-    rechazado: findAny(["rech"]),
-    aprobado: findAny(["aprob", "conf"]),
-    enCurso: findAny(["curso", "envio", "envío"]),
-    enTransito: findAny(["transit", "transito", "tránsito"]) || 5,
-    completado: findAny(["complet", "entreg"]) || 6,
-    retrasado: findAny(["retras", "delay"]) || 0,
-  }), [findAny]);
+  const ids = useMemo(
+    () => ({
+      pendiente: findAny(["pend"]),
+      rechazado: findAny(["rech"]),
+      aprobado: findAny(["aprob", "conf"]),
+      enCurso: findAny(["curso", "envio", "envío"]),
+      enTransito: findAny(["transit", "transito", "tránsito"]) || 5,
+      completado: findAny(["complet", "entreg"]) || 6,
+      retrasado: findAny(["retras", "delay"]) || 0,
+    }),
+    [findAny]
+  );
 
   const repMap = useMemo(() => {
     const m = new Map();
@@ -135,7 +166,10 @@ export default function SupplierPedidos() {
       });
       await fetchAll();
     } catch (e) {
-      setFlash({ type: "error", msg: e.message || "No se pudo actualizar el estado." });
+      setFlash({
+        type: "error",
+        msg: e.message || "No se pudo actualizar el estado.",
+      });
     }
   }
 
@@ -167,7 +201,10 @@ export default function SupplierPedidos() {
       }
 
       setAcceptModal(null);
-      setFlash({ type: "success", msg: "Pedido aceptado y movido a En tránsito." });
+      setFlash({
+        type: "success",
+        msg: "Pedido aceptado y movido a En tránsito.",
+      });
     } catch (e) {
       setFlash({ type: "error", msg: e.message || "Error al aceptar pedido." });
     }
@@ -191,7 +228,10 @@ export default function SupplierPedidos() {
       setDelayModal(null);
       setFlash({ type: "success", msg: "Retraso notificado." });
     } catch (e) {
-      setFlash({ type: "error", msg: e.message || "No se pudo notificar el retraso." });
+      setFlash({
+        type: "error",
+        msg: e.message || "No se pudo notificar el retraso.",
+      });
     }
   }
 
@@ -200,9 +240,15 @@ export default function SupplierPedidos() {
       <h2>Pedidos</h2>
 
       {flash && (
-        <div className={`alert ${flash.type === "error" ? "alert-error" : "alert-success"} mb-4`}>
+        <div
+          className={`alert ${
+            flash.type === "error" ? "alert-error" : "alert-success"
+          } mb-4`}
+        >
           <span>{flash.msg}</span>
-          <button className="btn btn-sm ml-auto" onClick={() => setFlash(null)}>Cerrar</button>
+          <button className="btn btn-sm ml-auto" onClick={() => setFlash(null)}>
+            Cerrar
+          </button>
         </div>
       )}
       {err && <p className="text-error">{err}</p>}
@@ -211,58 +257,83 @@ export default function SupplierPedidos() {
       <div className="overflow-x-auto">
         <table className="table">
           <thead>
-            <tr><th>#</th><th>Fecha</th><th>Estado</th><th>Total</th><th className="text-right">Acciones</th></tr>
+            <tr>
+              <th>#</th>
+              <th>Fecha</th>
+              <th>Estado</th>
+              <th>Total</th>
+              <th className="text-right">Acciones</th>
+            </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={5}>Sin pedidos.</td></tr>
-            ) : rows.map((p) => (
-              <tr key={p.id} className={focusId === Number(p.id) ? "bg-base-200" : ""}>
-                <td>#{p.id}</td>
-                <td>{p.fecha ?? p.fecha_creacion ?? ""}</td>
-                <td><span className={estadoBadge(p.estado)}>{`Estado ${p.estado}`}</span></td>
-                <td>{p.total != null ? `$${Number(p.total).toFixed(2)}` : "—"}</td>
-                <td className="text-right">
-                  <div className="join">
-                    <button
-                      className="btn btn-sm btn-success join-item"
-                      onClick={() => setAcceptModal({ pedido: p, provRepId: 0, cantidad: 1 })}
-                      title="Aceptar (crea detalle y pasa a En tránsito)"
-                    >
-                      Aceptar
-                    </button>
-                    <button
-                      className="btn btn-sm btn-outline join-item"
-                      onClick={() => setEstado(p, ids.rechazado)}
-                      title="Rechazar"
-                    >
-                      Rechazar
-                    </button>
-                    <button
-                      className="btn btn-sm join-item"
-                      onClick={() => setEstado(p, ids.enCurso)}
-                      title="Confirmar envío"
-                    >
-                      Envío
-                    </button>
-                    <button
-                      className="btn btn-sm join-item"
-                      onClick={() => setEstado(p, ids.completado)}
-                      title="Confirmar entrega"
-                    >
-                      Entregado
-                    </button>
-                    <button
-                      className="btn btn-sm btn-ghost join-item"
-                      onClick={() => setDelayModal({ pedido: p, motivo: "" })}
-                      title="Notificar retraso"
-                    >
-                      Retraso
-                    </button>
-                  </div>
-                </td>
+              <tr>
+                <td colSpan={5}>Sin pedidos.</td>
               </tr>
-            ))}
+            ) : (
+              rows.map((p) => (
+                <tr
+                  key={p.id}
+                  className={focusId === Number(p.id) ? "bg-base-200" : ""}
+                >
+                  <td>#{p.id}</td>
+                  <td>{p.fecha ?? p.fecha_creacion ?? ""}</td>
+                  <td>
+                    <span className={estadoBadge(p.estado)}>
+                      {estadoTexto(p.estado)}
+                    </span>
+                  </td>
+                  <td>
+                    {p.total != null ? `$${Number(p.total).toFixed(2)}` : "—"}
+                  </td>
+                  <td className="text-right">
+                    <div className="join">
+                      <button
+                        className="btn btn-sm btn-success join-item"
+                        onClick={() =>
+                          setAcceptModal({
+                            pedido: p,
+                            provRepId: 0,
+                            cantidad: 1,
+                          })
+                        }
+                        title="Aceptar (crea detalle y pasa a En tránsito)"
+                      >
+                        Aceptar
+                      </button>
+                      <button
+                        className="btn btn-sm btn-outline join-item"
+                        onClick={() => setEstado(p, ids.rechazado)}
+                        title="Rechazar"
+                      >
+                        Rechazar
+                      </button>
+                      <button
+                        className="btn btn-sm join-item"
+                        onClick={() => setEstado(p, ids.enCurso)}
+                        title="Confirmar envío"
+                      >
+                        Envío
+                      </button>
+                      <button
+                        className="btn btn-sm join-item"
+                        onClick={() => setEstado(p, ids.completado)}
+                        title="Confirmar entrega"
+                      >
+                        Entregado
+                      </button>
+                      <button
+                        className="btn btn-sm btn-ghost join-item"
+                        onClick={() => setDelayModal({ pedido: p, motivo: "" })}
+                        title="Notificar retraso"
+                      >
+                        Retraso
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -270,55 +341,93 @@ export default function SupplierPedidos() {
       {acceptModal && (
         <div className="modal modal-open">
           <div className="modal-box max-w-lg">
-            <h3 className="font-bold text-lg">Aceptar pedido #{acceptModal.pedido.id}</h3>
+            <h3 className="font-bold text-lg">
+              Aceptar pedido #{acceptModal.pedido.id}
+            </h3>
             <div className="mt-4 grid grid-cols-1 gap-3">
               <div>
-                <label className="label"><span className="label-text">Proveedor-Repuesto</span></label>
+                <label className="label">
+                  <span className="label-text">Proveedor-Repuesto</span>
+                </label>
                 <select
                   className="select select-bordered w-full"
                   value={acceptModal.provRepId || 0}
-                  onChange={(e) => setAcceptModal((m) => ({ ...m, provRepId: Number(e.target.value) }))}
+                  onChange={(e) =>
+                    setAcceptModal((m) => ({
+                      ...m,
+                      provRepId: Number(e.target.value),
+                    }))
+                  }
                 >
-                  <option value={0} disabled>Seleccione…</option>
+                  <option value={0} disabled>
+                    Seleccione…
+                  </option>
                   {provRep.map((pr) => (
-                    <option key={pr.id} value={pr.id}>{labelProvRepuesto(pr)}</option>
+                    <option key={pr.id} value={pr.id}>
+                      {labelProvRepuesto(pr)}
+                    </option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="label"><span className="label-text">Cantidad</span></label>
+                <label className="label">
+                  <span className="label-text">Cantidad</span>
+                </label>
                 <input
-                  type="number" min={1}
+                  type="number"
+                  min={1}
                   className="input input-bordered w-full"
                   value={acceptModal.cantidad}
-                  onChange={(e) => setAcceptModal((m) => ({ ...m, cantidad: Number(e.target.value) || 1 }))}
+                  onChange={(e) =>
+                    setAcceptModal((m) => ({
+                      ...m,
+                      cantidad: Number(e.target.value) || 1,
+                    }))
+                  }
                 />
               </div>
             </div>
             <div className="modal-action">
-              <button className="btn" onClick={() => setAcceptModal(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={confirmarAceptar}>Confirmar</button>
+              <button className="btn" onClick={() => setAcceptModal(null)}>
+                Cancelar
+              </button>
+              <button className="btn btn-primary" onClick={confirmarAceptar}>
+                Confirmar
+              </button>
             </div>
           </div>
-          <div className="modal-backdrop" onClick={() => setAcceptModal(null)} />
+          <div
+            className="modal-backdrop"
+            onClick={() => setAcceptModal(null)}
+          />
         </div>
       )}
 
       {delayModal && (
         <div className="modal modal-open">
           <div className="modal-box max-w-md">
-            <h3 className="font-bold text-lg">Notificar retraso del pedido #{delayModal.pedido.id}</h3>
+            <h3 className="font-bold text-lg">
+              Notificar retraso del pedido #{delayModal.pedido.id}
+            </h3>
             <div className="mt-4">
-              <label className="label"><span className="label-text">Motivo (opcional)</span></label>
+              <label className="label">
+                <span className="label-text">Motivo (opcional)</span>
+              </label>
               <textarea
                 className="textarea textarea-bordered w-full h-28"
                 value={delayModal.motivo}
-                onChange={(e) => setDelayModal((m) => ({ ...m, motivo: e.target.value }))}
+                onChange={(e) =>
+                  setDelayModal((m) => ({ ...m, motivo: e.target.value }))
+                }
               />
             </div>
             <div className="modal-action">
-              <button className="btn" onClick={() => setDelayModal(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={confirmarRetraso}>Notificar</button>
+              <button className="btn" onClick={() => setDelayModal(null)}>
+                Cancelar
+              </button>
+              <button className="btn btn-primary" onClick={confirmarRetraso}>
+                Notificar
+              </button>
             </div>
           </div>
           <div className="modal-backdrop" onClick={() => setDelayModal(null)} />

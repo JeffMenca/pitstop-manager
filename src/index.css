@@ -1,0 +1,7 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+@theme {
+  --color-pitstop-red: #FD375F;
+  --color-pitstop-dark: #E5E5E5;
+}

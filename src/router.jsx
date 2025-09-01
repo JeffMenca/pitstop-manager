@@ -20,6 +20,7 @@ import ProtectedRoute from "./services/ProtectedRoute";
 import GestionUsuarios from "./pages/admin/GestionUsuarios";
 import AdminLayout from "./pages/admin/AdminLayout";
 import GestionVehiculos from "./pages/admin/GestionVehiculos";
+import GestionOrdenes from "./pages/admin/GestionOrdenes";
 
 const router = createBrowserRouter([
   {
@@ -46,6 +47,7 @@ const router = createBrowserRouter([
           { index: true, element: <AdminHome /> },
           { path: "usuarios", element: <GestionUsuarios /> },
           { path: "vehiculos", element: <GestionVehiculos /> },
+          { path: "trabajos", element: <GestionOrdenes /> },
         ],
       },
       {

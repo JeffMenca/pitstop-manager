@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../../services/api";
+import { useNavigate } from "react-router-dom";
 
 // --- Roles for filtering clients from /usuario ---
 const ROLE_CLIENTE_ID = 2;
 
 // --- Normalize server vehicle to a consistent shape ---
 function normalizeVehicle(v) {
-  // Backend POST uses keys: id_cliente, marca, modelo, placas
   const idCliente =
     typeof v?.id_cliente === "number"
       ? v.id_cliente
@@ -26,13 +26,19 @@ function normalizeVehicle(v) {
 
 // --- Badge style for estado id (basic heuristic) ---
 function estadoBadgeClass(id) {
-  // NOTE: Adjust mapping to your real semantics if needed
   switch (Number(id)) {
-    case 1: return "badge badge-warning";   // e.g., Activo/Pendiente
-    case 2: return "badge badge-info";      // e.g., En proceso
-    case 3: return "badge badge-success";   // e.g., Finalizado
-    case 4: return "badge badge-error";     // e.g., Cancelado
-    default: return "badge badge-ghost";
+    case 1:
+      return "badge badge-warning"; // Pendiente
+    case 2:
+      return "badge badge-error"; // Cancelado
+    case 3:
+      return "badge badge-success"; // Aprobado
+    case 4:
+      return "badge badge-info"; // En curso
+    case 5:
+      return "badge badge-success"; // Completado
+    default:
+      return "badge badge-ghost";
   }
 }
 
@@ -75,7 +81,6 @@ export default function GestionVehiculos() {
       const list = Array.isArray(data) ? data : [];
       const onlyClients = list
         .filter((u) => {
-          // Role may be number or object { id }
           const rid =
             typeof u?.rol === "number"
               ? u.rol
@@ -186,37 +191,32 @@ export default function GestionVehiculos() {
     setOrdersLoading(true);
 
     try {
-      // 1) Load orders by vehicle id
       const data = await api.get(`/ordenreparacion/idVehiculo/${v.id}`);
       const list = Array.isArray(data) ? data : [];
 
-      // 2) Determine distinct estado ids
-      const uniqueIds = Array.from(new Set(list.map((o) => Number(o.estado)).filter(Boolean)));
-
-      // 3) Fetch any estado labels not in cache
-      const missing = uniqueIds.filter((id) => !estadoCache.has(id));
-      if (missing.length > 0) {
-        const results = await Promise.all(
-          missing.map(async (id) => {
-            try {
-              const res = await api.get(`/estadotrabajo/${id}`);
-              // Try common fields: "estado", "descripcion", "nombre"
-              const label = res?.estado || res?.descripcion || res?.nombre || `Estado ${id}`;
-              return [id, String(label)];
-            } catch {
-              return [id, `Estado ${id}`];
-            }
-          })
-        );
-        const newMap = new Map(estadoCache);
-        results.forEach(([id, label]) => newMap.set(id, label));
-        setEstadoCache(newMap);
+      let map = estadoCache;
+      if (!map || map.size === 0) {
+        try {
+          const estados = await api.get("/estadoordenreparacion");
+          const m = new Map();
+          (Array.isArray(estados) ? estados : []).forEach((e) => {
+            const id = Number(e.id ?? e.ID ?? e.codigo ?? e.estado_id ?? 0);
+            const label = String(
+              e.estado ?? e.nombre ?? e.descripcion ?? `Estado ${id}`
+            );
+            m.set(id, label);
+          });
+          setEstadoCache(m);
+          map = m;
+        } catch {
+          map = estadoCache;
+        }
       }
 
-      // 4) Attach estadoLabel from cache
+      // 3) Adjuntar label al resultado
       const withLabels = list.map((o) => ({
         ...o,
-        estadoLabel: estadoCache.get(Number(o.estado)) || `Estado ${o.estado}`,
+        estadoLabel: map.get(Number(o.estado)) || `Estado ${o.estado}`,
       }));
       setOrders(withLabels);
     } catch (e) {
@@ -230,7 +230,8 @@ export default function GestionVehiculos() {
     <section className="prose max-w-none px-10">
       <h2>Vehículos</h2>
       <p className="opacity-70 mb-10">
-        Visualiza vehículos registrados, su cliente y gestiona marca/modelo/placas.
+        Visualiza vehículos registrados, su cliente y gestiona
+        marca/modelo/placas.
       </p>
 
       {/* Toolbar */}
@@ -344,13 +345,20 @@ export default function GestionVehiculos() {
       {confirmDelete && (
         <div className="modal modal-open">
           <div className="modal-box">
-            <h3 className="font-bold text-lg text-error">Confirmar eliminación</h3>
+            <h3 className="font-bold text-lg text-error">
+              Confirmar eliminación
+            </h3>
             <p className="py-4">
               ¿Seguro que deseas eliminar el vehículo{" "}
-              <strong>{confirmDelete.placas}</strong> ({confirmDelete.marca} {confirmDelete.modelo})?
+              <strong>{confirmDelete.placas}</strong> ({confirmDelete.marca}{" "}
+              {confirmDelete.modelo})?
             </p>
             <div className="flex justify-end gap-2">
-              <button className="btn" onClick={() => setConfirmDelete(null)} disabled={deleting}>
+              <button
+                className="btn"
+                onClick={() => setConfirmDelete(null)}
+                disabled={deleting}
+              >
                 Cancelar
               </button>
               <button
@@ -362,7 +370,10 @@ export default function GestionVehiculos() {
               </button>
             </div>
           </div>
-          <div className="modal-backdrop" onClick={() => !deleting && setConfirmDelete(null)}></div>
+          <div
+            className="modal-backdrop"
+            onClick={() => !deleting && setConfirmDelete(null)}
+          ></div>
         </div>
       )}
 
@@ -374,6 +385,7 @@ export default function GestionVehiculos() {
           loading={ordersLoading}
           error={ordersErr}
           close={() => setOpenOrders(false)}
+          refresh={() => showOrdersForVehicle(ordersVehiculo)}
         />
       )}
     </section>
@@ -381,13 +393,54 @@ export default function GestionVehiculos() {
 }
 
 /* --------------------- Orders Modal --------------------- */
-function OrdersModal({ vehiculo, orders, loading, error, close }) {
+function OrdersModal({ vehiculo, orders, loading, error, close, refresh }) {
+  const navigate = useNavigate();
+  const [creating, setCreating] = useState(false);
+
+  async function crearOrden() {
+    if (!vehiculo?.id || creating) return;
+    setCreating(true);
+    try {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      const fecha = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(
+        now.getDate()
+      )}`;
+      const hora = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(
+        now.getSeconds()
+      )}`;
+
+      await api.post("/ordenreparacion", {
+        id_vehiculo: Number(vehiculo.id),
+        fecha_ingreso: fecha,
+        hora_ingreso: hora,
+      });
+
+      await refresh?.();
+    } catch (e) {
+      alert(e.message || "No se pudo crear la orden");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <div className="modal modal-open">
       <div className="modal-box max-w-5xl">
-        <h3 className="font-bold text-lg">
-          Órdenes de reparación – {vehiculo?.placas} ({vehiculo?.marca} {vehiculo?.modelo})
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-lg">
+            Órdenes de reparación – {vehiculo?.placas} ({vehiculo?.marca}{" "}
+            {vehiculo?.modelo})
+          </h3>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={crearOrden}
+            disabled={creating || loading}
+            title="Crear una nueva orden para este vehículo"
+          >
+            {creating ? "Creando..." : "Agregar orden"}
+          </button>
+        </div>
 
         {loading ? (
           <div className="py-6">
@@ -406,6 +459,7 @@ function OrdersModal({ vehiculo, orders, loading, error, close }) {
                   <th>Ingreso</th>
                   <th>Egreso</th>
                   <th>Estado</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -413,7 +467,6 @@ function OrdersModal({ vehiculo, orders, loading, error, close }) {
                   <tr key={o.id}>
                     <td>{o.id}</td>
                     <td>
-                      {/* Format: YYYY-MM-DD HH:mm:ss */}
                       {o.fecha_ingreso} {o.hora_ingreso}
                     </td>
                     <td>
@@ -429,6 +482,16 @@ function OrdersModal({ vehiculo, orders, loading, error, close }) {
                       <span className={estadoBadgeClass(o.estado)}>
                         {o.estadoLabel || `Estado ${o.estado}`}
                       </span>
+                    </td>
+                    <td className="text-right">
+                      <button
+                        className="btn btn-outline btn-sm"
+                        onClick={() =>
+                          navigate(`/admin/trabajos?vehiculoId=${vehiculo.id}`)
+                        }
+                      >
+                        Ver en módulo
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -489,19 +552,28 @@ function VehiculoModal({ initial, clientes, onClose, onSaved }) {
   return (
     <div className="modal modal-open">
       <div className="modal-box max-w-xl">
-        <h3 className="font-bold text-lg">{isEdit ? "Editar vehículo" : "Nuevo vehículo"}</h3>
+        <h3 className="font-bold text-lg">
+          {isEdit ? "Editar vehículo" : "Nuevo vehículo"}
+        </h3>
 
-        <form className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4" onSubmit={onSubmit}>
+        <form
+          className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4"
+          onSubmit={onSubmit}
+        >
           {/* Client */}
-          <div className="form-control md:col-span-2">
-            <label className="label"><span className="label-text">Cliente</span></label>
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Cliente</span>
+            </label>
             <select
               className="select select-bordered"
               value={form.id_cliente}
               onChange={(e) => upd("id_cliente", Number(e.target.value))}
               required
             >
-              <option value={0} disabled>Seleccione un cliente</option>
+              <option value={0} disabled>
+                Seleccione un cliente
+              </option>
               {clientes.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.nombre} {c.apellido}
@@ -512,7 +584,9 @@ function VehiculoModal({ initial, clientes, onClose, onSaved }) {
 
           {/* Marca */}
           <div className="form-control">
-            <label className="label"><span className="label-text">Marca</span></label>
+            <label className="label">
+              <span className="label-text">Marca</span>
+            </label>
             <input
               className="input input-bordered"
               value={form.marca}
@@ -523,7 +597,9 @@ function VehiculoModal({ initial, clientes, onClose, onSaved }) {
 
           {/* Modelo */}
           <div className="form-control">
-            <label className="label"><span className="label-text">Modelo</span></label>
+            <label className="label">
+              <span className="label-text">Modelo</span>
+            </label>
             <input
               className="input input-bordered"
               value={form.modelo}
@@ -533,8 +609,10 @@ function VehiculoModal({ initial, clientes, onClose, onSaved }) {
           </div>
 
           {/* Placas */}
-          <div className="form-control md:col-span-2">
-            <label className="label"><span className="label-text">Placas</span></label>
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Placas</span>
+            </label>
             <input
               className="input input-bordered"
               value={form.placas}
@@ -545,7 +623,9 @@ function VehiculoModal({ initial, clientes, onClose, onSaved }) {
 
           {/* Actions */}
           <div className="md:col-span-2 flex justify-end gap-2 mt-2">
-            <button type="button" className="btn" onClick={onClose}>Cancelar</button>
+            <button type="button" className="btn" onClick={onClose}>
+              Cancelar
+            </button>
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? "Guardando..." : "Guardar"}
             </button>

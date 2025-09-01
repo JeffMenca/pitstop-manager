@@ -24,6 +24,7 @@ import GestionOrdenes from "./pages/admin/GestionOrdenes";
 import GestionInventario from "./pages/admin/GestionInventario";
 import GestionFactura from "./pages/admin/GestionFactura";
 import GestionPagosProveedores from "./pages/admin/GestionPagosProveedores";
+import AdminReportes from "./pages/admin/AdminReportes";
 
 //Client components
 import ClientLayout from "./pages/client/ClientLayout";
@@ -74,6 +75,7 @@ const router = createBrowserRouter([
           { path: "inventario", element: <GestionInventario /> },
           { path: "facturacion", element: <GestionFactura /> },
           { path: "pagos", element: <GestionPagosProveedores /> },
+          { path: "reportes", element: <AdminReportes /> },
         ],
       },
       {

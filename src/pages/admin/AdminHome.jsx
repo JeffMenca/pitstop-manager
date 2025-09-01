@@ -33,6 +33,11 @@ export default function AdminHome() {
       title: "Pagos a proveedores",
       desc: "Realizados y pendientes",
     },
+     {
+      to: "/admin/reportes",     
+      title: "Reportes",        
+      desc: "Órdenes por fecha y por vehículo (exportar a PDF)", 
+    },
   ];
 
   return (

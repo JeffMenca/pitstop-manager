@@ -1,7 +1,17 @@
 // src/pages/VerifyEmail.jsx
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, NavLink } from "react-router-dom";
-import { verifyEmail, getToken } from "../services/authService";
+import { getToken, setAuthStage } from "../services/authService";
+import { api } from "../services/api";
+
+function decodeJwt(token) {
+  try {
+    const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(b64));
+  } catch {
+    return null;
+  }
+}
 
 export default function VerifyEmail() {
   const [code, setCode] = useState("");
@@ -10,23 +20,9 @@ export default function VerifyEmail() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Guard: must have a token received from /login 301 flow
   useEffect(() => {
-    // If there is no token, user should go back to login
     if (!getToken()) navigate("/login", { replace: true });
   }, [navigate]);
-
-  // Helper: read a JSON message from the server if present
-  async function readServerMessage(resp) {
-    const ctype = resp.headers.get("content-type") || "";
-    if (ctype.includes("application/json")) {
-      try {
-        const data = await resp.json();
-        return data?.message || null;
-      } catch {}
-    }
-    return null;
-  }
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -34,36 +30,37 @@ export default function VerifyEmail() {
     setLoading(true);
 
     try {
-      const resp = await verifyEmail(code);
+      const token = getToken();
+      const payload = decodeJwt(token || "");
+      const usuarioId =
+        Number(
+          payload?.usuarioId ??
+            payload?.userId ??
+            payload?.id ??
+            payload?.uid ??
+            payload?.sub ??
+            0
+        ) || 0;
 
-      // 200 → email verified, go to app
-      if (resp.status === 200) {
-        navigate("/home", { replace: true });
+      if (!usuarioId) {
+        setError("Sesión inválida. Inicia sesión de nuevo.");
+        setLoading(false);
         return;
       }
 
-      // Friendly mapping for common errors
-      let friendly;
-      switch (resp.status) {
-        case 400:
-        case 401:
-        case 404:
-          friendly = "Invalid or expired code.";
-          break;
-        case 429:
-          friendly = "Too many attempts. Please try again later.";
-          break;
-        case 500:
-          friendly = "Server error. Please try again later.";
-          break;
-        default:
-          friendly = `Unexpected error (${resp.status}).`;
-      }
+      const body = { usuarioId, codigo: String(code || "").trim() };
+      const resp = await api.post("/api/login/verificar", body).catch(() =>
+        api.post("/login/verificar", body)
+      );
 
-      const serverMsg = await readServerMessage(resp);
-      setError(serverMsg || friendly);
-    } catch {
-      setError("Network error. Check your connection.");
+      if (resp?.success) {
+        setAuthStage("full");
+        navigate("/home", { replace: true });
+      } else {
+        setError(resp?.mensaje || resp?.message || "Código inválido o vencido.");
+      }
+    } catch (e) {
+      setError(e.message || "No se pudo verificar el código.");
     } finally {
       setLoading(false);
     }
@@ -78,12 +75,11 @@ export default function VerifyEmail() {
             alt="Sidecar"
             className="w-[700px] my-10 transform scale-x-[-1]"
           />
-          <h2 className="card-title">Aun debes verificar tu correo</h2>
+          <h2 className="card-title">Aún debes verificar tu correo</h2>
           <p className="text-sm opacity-80">
             Ingresa el código de verificación que te enviamos por correo.
           </p>
 
-          {/* Optional: notice forwarded from /login */}
           {location.state?.msg && (
             <div className="alert alert-info mt-3">{location.state.msg}</div>
           )}
@@ -91,7 +87,7 @@ export default function VerifyEmail() {
           <form className="mt-4 space-y-4" onSubmit={onSubmit} noValidate>
             <input
               type="text"
-              placeholder="Codigo de verificación"
+              placeholder="Código de verificación"
               className="input input-bordered w-full tracking-widest"
               value={code}
               onChange={(e) => setCode(e.target.value)}

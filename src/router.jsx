@@ -25,6 +25,26 @@ import GestionInventario from "./pages/admin/GestionInventario";
 import GestionFactura from "./pages/admin/GestionFactura";
 import GestionPagosProveedores from "./pages/admin/GestionPagosProveedores";
 
+//Client components
+import ClientLayout from "./pages/client/ClientLayout";
+import ClientOrders from "./pages/client/ClientOrders";
+import ClientOrderDetail from "./pages/client/ClientOrderDetail";
+import ClientInvoices from "./pages/client/ClientInvoices";
+
+//Employee components
+import EmployeeLayout from "./pages/employee/EmployeeLayout";
+import EmployeeOrdenes from "./pages/employee/EmployeeOrdenes";
+import EmployeeOrdenDetalle from "./pages/employee/EmployeeOrdenDetalle";
+import EmployeeFacturas from "./pages/employee/EmployeeFacturas";
+import EmployeeFacturaDetalle from "./pages/employee/EmployeeFacturaDetalle";
+import EmployeeSoporte from "./pages/employee/EmployeeSoporte";
+
+//Supplier components
+import SupplierLayout from "./pages/supplier/SupplierLayout";
+import SupplierPedidos from "./pages/supplier/SupplierPedidos";
+import SupplierCotizaciones from "./pages/supplier/SupplierCotizaciones";
+import SupplierProductos from "./pages/supplier/SupplierProductos";
+
 const router = createBrowserRouter([
   {
     path: "/",
@@ -60,25 +80,45 @@ const router = createBrowserRouter([
         path: "cliente",
         element: (
           <ProtectedRoute allow={["client", "cliente"]}>
-            <ClientHome />
+            <ClientLayout />
           </ProtectedRoute>
         ),
+        children: [
+          { index: true, element: <ClientHome /> },
+          { path: "ordenes", element: <ClientOrders /> },
+          { path: "orden/:id", element: <ClientOrderDetail /> },
+          { path: "facturas", element: <ClientInvoices /> },
+        ],
       },
       {
         path: "empleado",
         element: (
           <ProtectedRoute allow={["emple"]}>
-            <EmployeeHome />
+            <EmployeeLayout />
           </ProtectedRoute>
         ),
+        children: [
+          { index: true, element: <EmployeeHome /> },
+          { path: "ordenes", element: <EmployeeOrdenes /> },
+          { path: "orden/:id", element: <EmployeeOrdenDetalle /> },
+          { path: "facturas", element: <EmployeeFacturas /> },
+          { path: "factura/:id", element: <EmployeeFacturaDetalle /> },
+          { path: "soporte", element: <EmployeeSoporte /> },
+        ],
       },
       {
         path: "proveedor",
         element: (
           <ProtectedRoute allow={["prove"]}>
-            <SupplierHome />
+            <SupplierLayout />
           </ProtectedRoute>
         ),
+        children: [
+          { index: true, element: <SupplierHome /> },
+          { path: "pedidos", element: <SupplierPedidos /> },
+          { path: "cotizaciones", element: <SupplierCotizaciones /> },
+          { path: "productos", element: <SupplierProductos /> },
+        ],
       },
 
       { path: "*", element: <NotFound /> },
